@@ -73,8 +73,8 @@ jobs:
 
             - name: Push Docker image to Docker Hub
               run: |
-                docker tag blog-cms:latest ${{ secrets.DOCKER_USERNAME }}/blog-cms:latest
-                docker push ${{ secrets.DOCKER_USERNAME }}/blog-cms:latest
+                docker tag blog-cms:latest ${{ secrets.DOCKERHUB_USERNAME }}/blog-cms:latest
+                docker push ${{ secrets.DOCKERHUB_USERNAME }}/blog-cms:latest
 
             - name: Run Deployment
               run: |
@@ -87,4 +87,4 @@ jobs:
                   -e DB_NAME=blogdb \
                   -e DB_USER=admin \
                   -e DB_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
-                  sarthakiparad2230/blog-cms:latest
+                  ${{ secrets.DOCKERHUB_USERNAME }}/blog-cms:latest
