@@ -1,5 +1,5 @@
 // Presentation tier: a small single-page app using hash routing.
-// It talks only to the API via the same-origin /api path (proxied by nginx).
+// It talks only to the API via the same-origin /api path (served by Flask).
 // All API text is inserted with textContent / text nodes, never innerHTML,
 // so post and comment content cannot inject markup.
 "use strict";

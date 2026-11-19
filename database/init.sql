@@ -1,7 +1,8 @@
 -- ===========================================================================
--- Data tier: schema + demo content.
--- Runs automatically the first time the PostgreSQL container starts with an
--- empty data volume, so the site has posts to show right away.
+-- Data tier: PostgreSQL schema + demo content.
+-- The app runs this file automatically the first time it connects to an
+-- empty database, so the site has posts to show right away. (You can also run
+-- it by hand:  psql -U bloguser -d blogdb -f database/init.sql)
 -- ===========================================================================
 
 CREATE TABLE IF NOT EXISTS users (
@@ -60,7 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_comments_post ON comments (post_id, created_at);
 INSERT INTO users (id, username, display_name, bio, password_hash, role) VALUES
  (1, 'admin', 'Admin', 'Editor of The Dev Journal.', '!', 'admin'),
  (2, 'priya', 'Priya Sharma', 'Backend engineer who loves databases and clean APIs.', '!', 'author'),
- (3, 'arjun', 'Arjun Mehta', 'Full-stack developer and part-time Docker enthusiast.', '!', 'author');
+ (3, 'arjun', 'Arjun Mehta', 'Full-stack developer and part-time automation enthusiast.', '!', 'author');
 
 INSERT INTO tags (id, name, slug) VALUES
  (1, 'Announcements', 'announcements'),
@@ -69,7 +70,7 @@ INSERT INTO tags (id, name, slug) VALUES
  (4, 'Python',        'python'),
  (5, 'Database',      'database'),
  (6, 'PostgreSQL',    'postgresql'),
- (7, 'Docker',        'docker'),
+ (7, 'Testing',       'testing'),
  (8, 'DevOps',        'devops'),
  (9, 'API',           'api'),
  (10,'JavaScript',    'javascript'),
@@ -106,7 +107,7 @@ $body$Most web applications, from tiny hobby projects to large commercial platfo
 
 ## The three tiers
 
-- Presentation: what the user sees and clicks, usually HTML, CSS and JavaScript served by a web server
+- Presentation: what the user sees and clicks, usually HTML, CSS and JavaScript
 - Application: the business logic, validation and rules, exposed as an API
 - Data: the database that stores everything permanently
 
@@ -121,7 +122,7 @@ It is also safer. Only the application tier talks to the database, so the outsid
 When you open a post on this blog, the browser asks the API for it. The API runs one query against PostgreSQL and returns JSON. The browser turns that JSON into the page you read.
 
 ```
-Browser -> nginx -> Flask API -> PostgreSQL
+Browser -> Flask API -> PostgreSQL
 ```
 
 Keep this picture in mind and most backend design questions become easier to answer.$body$,
@@ -180,30 +181,26 @@ ALTER TABLE posts ADD CONSTRAINT posts_slug_unique UNIQUE (slug);
 For huge write-heavy event streams or very specialised workloads, other systems may fit better. For most web applications, PostgreSQL will carry you very far.$body$,
  2, TRUE, NOW() - INTERVAL '9 days', 267),
 
-(5, 'Docker Compose for Local Development', 'docker-compose-for-local-development',
- 'Run your whole stack with a single command and stop saying it works on my machine.',
-$body$Setting up a database, an API and a web server by hand is slow and error-prone. Docker Compose lets you describe the whole stack in one file and start it with a single command.
+(5, 'Testing Your API with curl', 'testing-your-api-with-curl',
+ 'Check every endpoint from the command line before you ever write a line of frontend code.',
+$body$Before building a user interface, it pays to check that the API behaves. The curl command is installed almost everywhere and is perfect for the job.
 
-## What Compose gives you
+## What to test
 
-- The same environment on every laptop and server
-- Services that can find each other by name
-- Persistent volumes so your data survives restarts
-- Health checks so the API waits until the database is ready
+- The happy path: does each endpoint return what you expect?
+- Bad input: do you get a clear 400 error instead of a crash?
+- Missing login: do protected routes return 401?
+- Unknown things: do missing records return 404?
 
-## The everyday commands
+## A first request
 
 ```
-docker compose up --build -d
-docker compose logs -f api
-docker compose down
+curl http://localhost:8000/api/posts
 ```
 
-## A tip about networks
+## Make it a habit
 
-Put your database on a private network that only the API can join. Then even if the web server were compromised, it still could not reach the data directly. This blog is set up exactly that way.
-
-Once you are comfortable with Compose, moving to a larger orchestrator later feels much less intimidating.$body$,
+Every time you fix a bug, add the request that exposed it to a small script. After a few weeks you will have a safety net that catches mistakes before your users do.$body$,
  3, TRUE, NOW() - INTERVAL '12 days', 178),
 
 (6, 'Designing a Friendly REST API', 'designing-a-friendly-rest-api',
@@ -289,7 +286,7 @@ INSERT INTO post_tags (post_id, tag_id) VALUES
  (2, 2), (2, 3),
  (3, 4),
  (4, 5), (4, 6),
- (5, 7), (5, 8),
+ (5, 7), (5, 9),
  (6, 9), (6, 3), (6, 4),
  (7, 10), (7, 11),
  (8, 8), (8, 12),
