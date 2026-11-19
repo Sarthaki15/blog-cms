@@ -1,8 +1,11 @@
-"""Application tier: Flask REST API for the blog / CMS.
+"""Application tier: Flask app for the blog / CMS.
 
-This is the only component that talks to PostgreSQL. The presentation tier
-(nginx + static files) calls it over HTTP. Public endpoints serve published
-content; /api/admin/* endpoints require a JWT issued by /api/auth/login.
+* /api/*  REST API (public endpoints + JWT-protected /api/admin/*)
+* /       serves the presentation tier (the static files in ../presentation)
+
+This is the only code that talks to PostgreSQL. On first run it creates the
+tables and demo content from ../database/init.sql if they do not exist yet.
+Run it with:  python application/app.py
 """
 import os
 import re
@@ -10,15 +13,22 @@ import time
 from contextlib import contextmanager
 from datetime import date, datetime, timedelta, timezone
 from functools import wraps
+from pathlib import Path
 
 import jwt
 import psycopg2
-from flask import Flask, g, jsonify, request
+from dotenv import load_dotenv
+from flask import Flask, g, jsonify, make_response, request, send_from_directory
 from flask.json.provider import DefaultJSONProvider
-from flask_cors import CORS
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
 from werkzeug.security import check_password_hash, generate_password_hash
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")  # optional; real environment variables win
+
+PRESENTATION_DIR = BASE_DIR / "presentation"
+INIT_SQL = BASE_DIR / "database" / "init.sql"
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-only-secret-change-me")
 JWT_HOURS = int(os.getenv("JWT_HOURS", "12"))
@@ -40,8 +50,8 @@ class JSONProvider(DefaultJSONProvider):
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
-def connect_with_retry(retries: int = 20, delay: float = 2.0):
-    """The DB container may still be starting; retry before giving up."""
+def connect_with_retry(retries: int = 10, delay: float = 2.0):
+    """Connect to PostgreSQL, retrying briefly in case it is still starting."""
     dsn = dict(
         host=os.getenv("DB_HOST", "localhost"),
         port=int(os.getenv("DB_PORT", "5432")),
@@ -57,7 +67,12 @@ def connect_with_retry(retries: int = 20, delay: float = 2.0):
             last = exc
             print(f"[db] attempt {attempt}/{retries} failed, retrying...", flush=True)
             time.sleep(delay)
-    raise RuntimeError(f"Could not connect to database: {last}")
+    raise RuntimeError(
+        "Could not connect to PostgreSQL at "
+        f"{dsn['host']}:{dsn['port']} (database '{dsn['dbname']}', user '{dsn['user']}').\n"
+        "Check that PostgreSQL is running and that DB_HOST, DB_PORT, DB_NAME, "
+        f"DB_USER and DB_PASSWORD in your .env are correct.\nDetails: {last}"
+    )
 
 
 db_pool = connect_with_retry()
@@ -76,6 +91,16 @@ def db():
         raise
     finally:
         db_pool.putconn(conn)
+
+
+def init_schema():
+    """Create the tables and demo content on first run (when `posts` is missing)."""
+    with db() as cur:
+        cur.execute("SELECT to_regclass('public.posts') AS t")
+        if cur.fetchone()["t"] is not None:
+            return
+        print("[db] empty database: creating tables and demo content...", flush=True)
+        cur.execute(INIT_SQL.read_text(encoding="utf-8"))
 
 
 def ensure_admin():
@@ -256,14 +281,27 @@ def admin_required(fn):
 # App + routes
 # ---------------------------------------------------------------------------
 def create_app() -> Flask:
-    app = Flask(__name__)
+    # The presentation tier is served from the same origin, so no CORS is needed.
+    app = Flask(__name__, static_folder=str(PRESENTATION_DIR), static_url_path="")
     app.json = JSONProvider(app)
-    CORS(app, origins=os.getenv("CORS_ORIGINS", "*").split(","))
 
     if JWT_SECRET == "dev-only-secret-change-me":
-        print("[warn] JWT_SECRET is the default value; set a strong one!", flush=True)
+        print("[warn] JWT_SECRET is the default value; set a strong one in .env!", flush=True)
 
+    init_schema()
     ensure_admin()
+
+    @app.after_request
+    def security_headers(resp):
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        return resp
+
+    # ---- frontend --------------------------------------------------------
+    @app.get("/")
+    def index():
+        return send_from_directory(PRESENTATION_DIR, "index.html")
 
     # ---- health ----------------------------------------------------------
     @app.get("/api/health")
@@ -512,7 +550,9 @@ def create_app() -> Flask:
     # ---- errors ----------------------------------------------------------
     @app.errorhandler(404)
     def not_found(_):
-        return jsonify(error="not found"), 404
+        if request.path.startswith("/api/"):
+            return jsonify(error="not found"), 404
+        return make_response("Not found", 404)
 
     @app.errorhandler(405)
     def method_not_allowed(_):
@@ -528,4 +568,7 @@ def create_app() -> Flask:
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=os.getenv("FLASK_DEBUG") == "1")
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
+    print(f"\n  The Dev Journal is running at http://{host}:{port}\n", flush=True)
+    app.run(host=host, port=port, debug=os.getenv("FLASK_DEBUG") == "1")
