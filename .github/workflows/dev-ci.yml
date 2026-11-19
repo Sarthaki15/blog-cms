@@ -47,7 +47,7 @@ jobs:
             - name: Run and Test Docker container
               run: |
                   docker run -d \
-                  --name blog-cms-test \ 
+                  --name blog-cms-test \
                   -p 8080:8080 \
                   --network host \
                   -e DB_HOST=localhost \
