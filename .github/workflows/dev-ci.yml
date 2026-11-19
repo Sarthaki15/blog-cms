@@ -1,0 +1,81 @@
+name: Blog CMS CI Pipeline for dev branch
+on:
+    push:
+        branches:
+            - dev
+    pull_request:
+        branches:
+            - dev
+    workflow_dispatch:
+
+jobs:
+    build-and-test:
+        runs-on: ubuntu-latest
+  
+        services:
+            postgres:
+                image: postgres:16
+                env:
+                    POSTGRES_USER: admin
+                    POSTGRES_PASSWORD: blog-cms2230
+                    POSTGRES_DB: blogdb
+                ports:
+                    - 5432:5432
+                options: >-
+                  --health-cmd "pg_isready -U admin -d blogdb"
+                  --health-interval 10s
+                  --health-timeout 5s
+                  --health-retries 5
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+
+            - name: Set up Python venv
+              uses: actions/setup-python@v4
+              with:
+                  python-version: '3.12'
+
+            - name: Install dependencies
+              run: |
+                  pip install --upgrade pip
+                  pip install -r requirements.txt
+
+            - name: Run tests
+              run: |
+                  python -m pytest
+
+            - name: Build Docker image
+              run: docker build -t blog-cms:dev . 
+              
+            - name: Run and Test Docker container
+              run: |
+                  docker run -d \
+                  --name blog-cms-test \ 
+                  -p 8080:8080 \
+                  --network host \
+                  -e DB_HOST=localhost \
+                  -e DB_PORT=5432 \
+                  -e DB_NAME=blogdb \
+                  -e DB_USER=admin \
+                  -e DB_PASSWORD=blog-cms2230 \
+                  blog-cms:dev
+
+                  for i in {1..30}; do
+                    if curl --fail http://localhost:8080/api/health; then
+                       echo "Application is healthy"
+                       exit 0
+                    fi
+                    echo "Waiting for application..."
+                    sleep 5
+                    done
+
+                    echo "Health check failed"
+                    docker logs blog-cms-test
+                    exit 1
+
+            - name: Clean up test container
+              if: always()
+              run: |
+                docker rm -f blog-cms-test || true
+                docker network rm blog-cms-net || true
