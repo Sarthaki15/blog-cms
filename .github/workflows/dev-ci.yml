@@ -17,7 +17,7 @@ jobs:
                 image: postgres:16
                 env:
                     POSTGRES_USER: admin
-                    POSTGRES_PASSWORD: blog-cms2230
+                    POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
                     POSTGRES_DB: blogdb
                 ports:
                     - 5432:5432
@@ -54,7 +54,7 @@ jobs:
                   -e DB_PORT=5432 \
                   -e DB_NAME=blogdb \
                   -e DB_USER=admin \
-                  -e DB_PASSWORD=blog-cms2230 \
+                  -e DB_PASSWORD=${{ secrets.POSTGRES_PASSWORD }} \
                   blog-cms:dev
 
                   for i in {1..30}; do
